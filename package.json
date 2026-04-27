@@ -1,0 +1,9 @@
+{
+  "name": "fana-bass-tabs",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "typecheck:web": "pnpm --filter web typecheck"
+  }
+}
