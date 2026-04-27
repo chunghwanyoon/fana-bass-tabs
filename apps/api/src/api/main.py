@@ -1,15 +1,34 @@
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from arq import create_pool
+from arq.connections import ArqRedis, RedisSettings
+from arq.jobs import Job, JobStatus
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.config import settings
-from api.pipeline import download, fretboard, score, separate, tab, transcribe
-from api.schemas import TranscribeRequest, TranscribeResult
+from api.schemas import (
+    JobAccepted,
+    JobStatusResponse,
+    TranscribeRequest,
+    TranscribeResult,
+)
 
-app = FastAPI(title="Fana Bass Tabs API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    app.state.arq = pool
+    try:
+        yield
+    finally:
+        await pool.close()
+
+
+app = FastAPI(title="Fana Bass Tabs API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,38 +40,8 @@ app.add_middleware(
 app.mount("/files", StaticFiles(directory=str(settings.storage_dir)), name="files")
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.post("/transcribe/url", response_model=TranscribeResult)
-def transcribe_url(req: TranscribeRequest) -> TranscribeResult:
-    job_id, job_dir = _new_job()
-    audio_path = download.from_url(str(req.source_url), job_dir)
-    return _run_pipeline(
-        job_id=job_id,
-        job_dir=job_dir,
-        audio_path=audio_path,
-        transcriber=req.transcriber or settings.transcriber,
-        tuning=req.tuning or settings.bass_tuning,
-    )
-
-
-@app.post("/transcribe/file", response_model=TranscribeResult)
-def transcribe_file(file: UploadFile = File(...)) -> TranscribeResult:
-    if not file.filename:
-        raise HTTPException(400, "filename required")
-    job_id, job_dir = _new_job()
-    audio_path = job_dir / file.filename
-    audio_path.write_bytes(file.file.read())
-    return _run_pipeline(
-        job_id=job_id,
-        job_dir=job_dir,
-        audio_path=audio_path,
-        transcriber=settings.transcriber,
-        tuning=settings.bass_tuning,
-    )
+def _arq(request: Request) -> ArqRedis:
+    return request.app.state.arq
 
 
 def _new_job() -> tuple[str, Path]:
@@ -62,28 +51,78 @@ def _new_job() -> tuple[str, Path]:
     return job_id, job_dir
 
 
-def _run_pipeline(
-    job_id: str,
-    job_dir: Path,
-    audio_path: Path,
-    transcriber: str,
-    tuning: str,
-) -> TranscribeResult:
-    bass_path = separate.extract_bass(audio_path, job_dir)
-    midi_path = transcribe.to_midi(bass_path, job_dir, backend=transcriber)
-    notes = transcribe.load_notes(midi_path)
-    tuning_spec = fretboard.get_tuning(tuning)
-    tab_notes = tab.notes_to_tab(notes, tuning_spec)
-    musicxml_path = score.notes_to_musicxml(notes, job_dir)
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
 
-    midi_url = f"/files/{job_id}/{midi_path.name}"
-    musicxml_url = f"/files/{job_id}/{musicxml_path.name}"
-    return TranscribeResult(
+
+@app.post("/transcribe/url", response_model=JobAccepted)
+async def transcribe_url(req: TranscribeRequest, request: Request) -> JobAccepted:
+    job_id, _ = _new_job()
+    pool = _arq(request)
+    await pool.enqueue_job(
+        "run_transcribe",
         job_id=job_id,
-        notes=notes,
-        tab=tab_notes,
-        musicxml_url=musicxml_url,
-        midi_url=midi_url,
-        tuning=tuning,
-        transcriber=transcriber,
+        audio_path=None,
+        url=str(req.source_url),
+        transcriber=req.transcriber or settings.transcriber,
+        tuning=req.tuning or settings.bass_tuning,
+        _job_id=job_id,
     )
+    return JobAccepted(job_id=job_id)
+
+
+@app.post("/transcribe/file", response_model=JobAccepted)
+async def transcribe_file(
+    request: Request, file: UploadFile = File(...)
+) -> JobAccepted:
+    if not file.filename:
+        raise HTTPException(400, "filename required")
+    job_id, job_dir = _new_job()
+    audio_path = job_dir / file.filename
+    audio_path.write_bytes(await file.read())
+    pool = _arq(request)
+    await pool.enqueue_job(
+        "run_transcribe",
+        job_id=job_id,
+        audio_path=str(audio_path),
+        url=None,
+        transcriber=settings.transcriber,
+        tuning=settings.bass_tuning,
+        _job_id=job_id,
+    )
+    return JobAccepted(job_id=job_id)
+
+
+@app.get("/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job(job_id: str, request: Request) -> JobStatusResponse:
+    pool = _arq(request)
+    job = Job(job_id, pool)
+    info = await job.info()
+
+    raw_stage = await pool.get(f"job_stage:{job_id}")
+    stage = raw_stage.decode() if isinstance(raw_stage, bytes) else raw_stage
+
+    if info is None:
+        return JobStatusResponse(job_id=job_id, status="not_found", stage=stage)
+
+    status = await job.status()
+
+    if status == JobStatus.complete:
+        try:
+            result_data = await job.result(timeout=0)
+        except Exception as e:
+            return JobStatusResponse(
+                job_id=job_id, status="failed", stage=stage, error=str(e)
+            )
+        return JobStatusResponse(
+            job_id=job_id,
+            status="complete",
+            stage=stage,
+            result=TranscribeResult(**result_data),
+        )
+
+    if status == JobStatus.in_progress:
+        return JobStatusResponse(job_id=job_id, status="running", stage=stage)
+
+    return JobStatusResponse(job_id=job_id, status="queued", stage=stage)

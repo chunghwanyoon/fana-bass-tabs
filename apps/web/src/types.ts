@@ -21,4 +21,20 @@ export type TranscribeResult = {
   midi_url: string;
   tuning: string;
   transcriber: string;
+  bpm: number;
+};
+
+export type JobAccepted = {
+  job_id: string;
+  status: "queued";
+};
+
+export type JobStatus = "queued" | "running" | "complete" | "failed" | "not_found";
+
+export type JobStatusResponse = {
+  job_id: string;
+  status: JobStatus;
+  stage: string | null;
+  result: TranscribeResult | null;
+  error: string | null;
 };

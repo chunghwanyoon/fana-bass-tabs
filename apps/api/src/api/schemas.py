@@ -32,3 +32,22 @@ class TranscribeResult(BaseModel):
     midi_url: str
     tuning: str
     transcriber: str
+    bpm: float
+
+
+class JobAccepted(BaseModel):
+    job_id: str
+    status: Literal["queued"] = "queued"
+
+
+JobStatusLiteral = Literal[
+    "queued", "running", "complete", "failed", "not_found"
+]
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: JobStatusLiteral
+    stage: str | None = None
+    result: TranscribeResult | None = None
+    error: str | None = None

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     demucs_model: str = "htdemucs"
     transcriber: Literal["basic_pitch", "crepe"] = "basic_pitch"
     bass_tuning: Literal["4string", "5string"] = "5string"
+    redis_url: str = "redis://localhost:6379"
 
 
 settings = Settings()
