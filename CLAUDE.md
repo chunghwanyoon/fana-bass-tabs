@@ -197,7 +197,50 @@ cd apps/web && pnpm dev    # http://localhost:5173
 | `[ml]` extras 분리 | PyTorch/TensorFlow 가 무거움. 가벼운 작업 (린트, 타입체크) 시 ML 설치 안 해도 됨 |
 | 프렛 위치 자체 구현 | 적절한 OSS 가 없음. "직전 위치 거리 최소화 + 낮은 프렛 선호" 휴리스틱. `apps/api/src/api/pipeline/fretboard.py:choose_positions` |
 
-## 11. 알려진 한계 / 다음에 해야 할 일
+## 11. 배포 (Fly.io + Vercel + Upstash)
+
+### 구성
+- **Frontend (Vercel)**: Vite 정적 빌드. Root Directory = `apps/web`. 환경변수 `VITE_API_BASE_URL` 로 백엔드 URL 주입
+- **Backend (Fly.io)**: 단일 Docker 컨테이너에 uvicorn (포그라운드) + arq 워커 (백그라운드). `apps/api/start.sh` 가 두 프로세스 동시 실행. `/data` 볼륨에 산출물 저장
+- **Redis (Upstash)**: 무료 티어. `REDIS_URL` 을 Fly secrets 로 등록 (`rediss://...`)
+
+### 핵심 결정
+- **api 와 worker 가 같은 컨테이너**: Fly 볼륨이 머신당 1개라 분리 시 산출물 공유 불가. 단일 머신에 합치고 `start.sh` 로 공동 실행
+- **모델 사전 베이크**: Dockerfile 빌드 시 Demucs/CREPE 가중치 다운로드 → 첫 요청 콜드 스타트 단축
+- **`auto_stop_machines = "stop"`**: 유휴 시 머신 정지, 요청 시 자동 기상. 비용 최소화
+- **2GB RAM 기본**: shared-cpu-1x. OOM 발생 시 `fly scale memory 4096` 으로 4GB 업그레이드 ($1.94 → $5/월)
+
+### 배포 파일
+- `apps/api/Dockerfile` — Python 3.11-slim + ffmpeg + ML deps + 모델 사전 다운로드
+- `apps/api/start.sh` — arq 워커 백그라운드 + uvicorn 포그라운드
+- `.dockerignore` — `apps/web`, `storage`, `__pycache__`, `.git` 등 제외
+- `fly.toml` — 빌드, 환경변수, http_service, 볼륨, VM 스펙 정의
+- `apps/web/.env.example` — `VITE_API_BASE_URL` 문서화
+
+### 첫 배포 런북 (사용자 작업)
+1. **GitHub 푸시**: 새 repo 생성 → `git remote add origin ... && git push -u origin main`
+2. **Upstash Redis**: upstash.com 가입 → Database 생성 → "Redis URL" (`rediss://...`) 복사
+3. **Fly 백엔드**:
+   - `brew install flyctl`
+   - `fly auth signup` 또는 `fly auth login`
+   - `fly launch --copy-config --no-deploy` (앱 이름/region 입력)
+   - `fly secrets set REDIS_URL="rediss://..."`
+   - `fly volumes create fana_storage --size 5 --region nrt` (region 은 fly.toml 과 동일)
+   - `fly deploy` (첫 배포 10-20분, ML deps + 모델 다운로드 때문)
+4. **Vercel 프론트엔드**:
+   - vercel.com 가입 → Add New Project → GitHub repo import
+   - Root Directory: `apps/web`
+   - Framework Preset: Vite
+   - Environment Variables: `VITE_API_BASE_URL=https://<fly-app>.fly.dev`
+   - Deploy
+
+### 자주 발생하는 문제
+- **Fly 빌드 OOM**: 빌더 메모리 부족 시 `fly deploy --build-only` 후 따로. 또는 `fly deploy --remote-only` (Fly 빌더 사용)
+- **Demucs OOM 런타임**: 머신 메모리 4GB 로 업그레이드
+- **Vercel build 실패 (pnpm workspace)**: Vercel 의 Root Directory 를 `apps/web` 으로, Build Command 는 자동 검출 (Vite). 만약 실패하면 Build Command 를 `pnpm install --frozen-lockfile=false && pnpm build` 로 명시
+- **CORS 오류**: 백엔드 `main.py` 의 CORS 미들웨어 `allow_origins=["*"]` 가 이미 허용. 만약 막히면 Vercel 도메인 명시
+
+## 12. 알려진 한계 / 다음에 해야 할 일
 
 작업 우선순위 순:
 
@@ -213,7 +256,7 @@ cd apps/web && pnpm dev    # http://localhost:5173
 10. **모델 프리페치** — 첫 요청에서 Demucs/CREPE 모델을 다운로드 (~150MB). 워커 startup 훅에서 미리 로드하면 사용자 첫 요청 지연 감소
 11. **TabView 정확도** — VexFlow `Voice.Mode.SOFT` 로 박자 검증을 끔. 마디 안에서 노트가 꽉 채우지 않아도 그대로 그림. 마디 정렬과 쉼표 삽입 개선 필요
 
-## 12. LLM 작업 시 주의사항
+## 13. LLM 작업 시 주의사항
 
 ### 하지 말 것
 - ML 의존성을 require 로 옮기지 말 것 (`[project.optional-dependencies].ml` 그대로). CI 가 무거워짐

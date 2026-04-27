@@ -1,0 +1,34 @@
+.git
+.gitignore
+.github
+
+# Frontend (이미지에 불필요)
+apps/web
+
+# Python
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/venv
+**/*.egg-info
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# 작업 산출물 / 환경
+storage
+.tmp
+tmp
+.env
+.env.local
+**/.env
+**/.env.local
+
+# Docs / dev 환경 (이미지에 불필요)
+CLAUDE.md
+README.md
+docker-compose.yml
+fly.toml
+
+# OS
+.DS_Store

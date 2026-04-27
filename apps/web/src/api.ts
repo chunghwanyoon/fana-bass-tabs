@@ -1,7 +1,11 @@
 import type { JobAccepted, JobStatusResponse, TranscribeResult } from "./types";
 
+// 개발 환경: VITE_API_BASE_URL 미설정 → "/api" 사용 (vite.config.ts 의 프록시가 :8000 으로 전달)
+// 프로덕션 (Vercel): VITE_API_BASE_URL=https://<your-app>.fly.dev 등 절대 URL 주입
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+
 export async function enqueueUrl(url: string): Promise<JobAccepted> {
-  const res = await fetch("/api/transcribe/url", {
+  const res = await fetch(`${API_BASE}/transcribe/url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source_url: url }),
@@ -13,13 +17,13 @@ export async function enqueueUrl(url: string): Promise<JobAccepted> {
 export async function enqueueFile(file: File): Promise<JobAccepted> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch("/api/transcribe/file", { method: "POST", body: form });
+  const res = await fetch(`${API_BASE}/transcribe/file`, { method: "POST", body: form });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
 export async function getJob(jobId: string): Promise<JobStatusResponse> {
-  const res = await fetch(`/api/jobs/${jobId}`);
+  const res = await fetch(`${API_BASE}/jobs/${jobId}`);
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json();
 }

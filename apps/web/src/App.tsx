@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent } from "react";
-import { enqueueFile, enqueueUrl, pollJob } from "./api";
+import { API_BASE, enqueueFile, enqueueUrl, pollJob } from "./api";
 import { ScoreView } from "./components/ScoreView";
 import { TabView } from "./components/TabView";
 import type { JobAccepted, TranscribeResult } from "./types";
@@ -72,7 +72,7 @@ export function App() {
             튜닝: {result.tuning} · 트랜스크라이버: {result.transcriber} · BPM: {result.bpm.toFixed(1)} · job: {result.job_id}
           </div>
           <h2>스코어</h2>
-          <ScoreView musicxmlUrl={`/api${result.musicxml_url}`} />
+          <ScoreView musicxmlUrl={`${API_BASE}${result.musicxml_url}`} />
           <h2>베이스 타브</h2>
           <TabView tab={result.tab} bpm={result.bpm} />
         </>
