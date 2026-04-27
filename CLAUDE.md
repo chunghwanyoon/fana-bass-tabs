@@ -197,48 +197,69 @@ cd apps/web && pnpm dev    # http://localhost:5173
 | `[ml]` extras 분리 | PyTorch/TensorFlow 가 무거움. 가벼운 작업 (린트, 타입체크) 시 ML 설치 안 해도 됨 |
 | 프렛 위치 자체 구현 | 적절한 OSS 가 없음. "직전 위치 거리 최소화 + 낮은 프렛 선호" 휴리스틱. `apps/api/src/api/pipeline/fretboard.py:choose_positions` |
 
-## 11. 배포 (Fly.io + Vercel + Upstash)
+## 11. 배포 (Hugging Face Spaces + Vercel + Upstash)
 
 ### 구성
-- **Frontend (Vercel)**: Vite 정적 빌드. Root Directory = `apps/web`. 환경변수 `VITE_API_BASE_URL` 로 백엔드 URL 주입
-- **Backend (Fly.io)**: 단일 Docker 컨테이너에 uvicorn (포그라운드) + arq 워커 (백그라운드). `apps/api/start.sh` 가 두 프로세스 동시 실행. `/data` 볼륨에 산출물 저장
-- **Redis (Upstash)**: 무료 티어. `REDIS_URL` 을 Fly secrets 로 등록 (`rediss://...`)
+- **Frontend (Vercel)**: Vite 정적 빌드. Root Directory = `apps/web`. 환경변수 `VITE_API_BASE_URL` 로 백엔드 URL 주입. 카드 불필요
+- **Backend (HF Spaces, Docker SDK)**: 단일 Docker 컨테이너에 uvicorn (포그라운드) + arq 워커 (백그라운드). `apps/api/start.sh` 가 두 프로세스 동시 실행. 카드 불필요, 무료 16GB RAM / 2 vCPU
+- **Redis (Upstash)**: 무료 티어. `REDIS_URL` 을 HF Space Secrets 에 등록 (`rediss://...`). 카드 불필요
 
 ### 핵심 결정
-- **api 와 worker 가 같은 컨테이너**: Fly 볼륨이 머신당 1개라 분리 시 산출물 공유 불가. 단일 머신에 합치고 `start.sh` 로 공동 실행
-- **모델 사전 베이크**: Dockerfile 빌드 시 Demucs/CREPE 가중치 다운로드 → 첫 요청 콜드 스타트 단축
-- **`auto_stop_machines = "stop"`**: 유휴 시 머신 정지, 요청 시 자동 기상. 비용 최소화
-- **2GB RAM 기본**: shared-cpu-1x. OOM 발생 시 `fly scale memory 4096` 으로 4GB 업그레이드 ($1.94 → $5/월)
+- **HF Spaces 선택 이유**: 카드 등록 불필요 (사용자 명시 요구사항). 16GB RAM 으로 Demucs OOM 위험 거의 없음. Docker SDK 라 로컬/프로덕션 동일 이미지
+- **api 와 worker 가 같은 컨테이너**: HF Spaces 가 단일 컨테이너 모델이라 자연스럽게 합쳐짐. `apps/api/start.sh` 가 백그라운드 워커 + 포그라운드 API 동시 실행
+- **비루트 사용자 (UID 1000)**: HF Spaces 보안 권장사항. Dockerfile 에 `USER user` 명시
+- **저장소는 ephemeral**: HF Spaces 무료 티어는 영속 디스크 없음 (paid 부가 옵션). Space 가 sleep/restart 되면 산출물 사라짐. **데모용으로 OK** — 새 요청은 정상 처리됨. 영속화가 필요해지면 HF Persistent Storage ($5/월) 또는 결과를 응답에 인라인 (base64 MusicXML/MIDI)
+- **공개 URL**: 무료 Space 는 항상 public. 호기심 트래픽 가능성 있음. 진짜 막으려면 백엔드에 토큰 인증 추가 (현재는 없음)
+- **48시간 sleep**: 미사용 시 자동 sleep, 첫 요청에 ~30초 wake-up. 이후는 즉시 응답
 
 ### 배포 파일
-- `apps/api/Dockerfile` — Python 3.11-slim + ffmpeg + ML deps + 모델 사전 다운로드
-- `apps/api/start.sh` — arq 워커 백그라운드 + uvicorn 포그라운드
+- `Dockerfile` (repo 루트) — HF Spaces 가 root 의 Dockerfile 을 자동 인식. Python 3.11-slim + ffmpeg + ML deps + 모델 사전 베이크. 비루트 사용자
+- `apps/api/start.sh` — arq 워커 백그라운드 + uvicorn 포그라운드. 워킹 디렉토리는 `/home/user/app`
 - `.dockerignore` — `apps/web`, `storage`, `__pycache__`, `.git` 등 제외
-- `fly.toml` — 빌드, 환경변수, http_service, 볼륨, VM 스펙 정의
+- `README.md` 의 YAML frontmatter — HF Spaces 메타데이터 (`title`, `sdk: docker`, `app_port: 8000`)
 - `apps/web/.env.example` — `VITE_API_BASE_URL` 문서화
 
 ### 첫 배포 런북 (사용자 작업)
+
 1. **GitHub 푸시**: 새 repo 생성 → `git remote add origin ... && git push -u origin main`
-2. **Upstash Redis**: upstash.com 가입 → Database 생성 → "Redis URL" (`rediss://...`) 복사
-3. **Fly 백엔드**:
-   - `brew install flyctl`
-   - `fly auth signup` 또는 `fly auth login`
-   - `fly launch --copy-config --no-deploy` (앱 이름/region 입력)
-   - `fly secrets set REDIS_URL="rediss://..."`
-   - `fly volumes create fana_storage --size 5 --region nrt` (region 은 fly.toml 과 동일)
-   - `fly deploy` (첫 배포 10-20분, ML deps + 모델 다운로드 때문)
+
+2. **Upstash Redis**: upstash.com 가입 (GitHub 로그인 가능, 카드 불필요) → Database 생성 (region: AP-Southeast-1 Singapore 또는 AP-Northeast-1 Tokyo) → "Endpoint" 의 `rediss://default:<password>@<host>:6379` URL 복사
+
+3. **HF Space 생성 + 배포**:
+   - huggingface.co 가입 (카드 불필요)
+   - "New Space" 클릭 → Settings:
+     - Space name: 임의 (예: `fana-bass-tabs`). 최종 URL: `https://<owner>-<space-name>.hf.space`
+     - License: 선택 (mit 등)
+     - SDK: **Docker** (Blank template)
+     - Hardware: CPU basic (free)
+     - Visibility: Public (free)
+   - 생성 후 Space 페이지 → Settings → "Repository secrets" → New secret:
+     - Name: `REDIS_URL`
+     - Value: 2단계의 `rediss://...` URL
+   - 로컬에서 HF Space 를 두번째 remote 로 추가하고 push:
+     ```bash
+     # HF 계정에 SSH 키 등록 후 (또는 HTTPS + access token 사용):
+     git remote add huggingface git@hf.co:spaces/<owner>/<space-name>.git
+     git push huggingface main
+     ```
+     - HTTPS 방식: `git remote add huggingface https://huggingface.co/spaces/<owner>/<space-name>` 후 push 시 username + Access Token 입력
+   - Space 페이지에서 "Building" → "Running" 으로 상태 변화 확인 (첫 빌드 10-20분)
+   - 백엔드 URL: `https://<owner>-<space-name>.hf.space`. `/health` 로 확인
+
 4. **Vercel 프론트엔드**:
    - vercel.com 가입 → Add New Project → GitHub repo import
    - Root Directory: `apps/web`
    - Framework Preset: Vite
-   - Environment Variables: `VITE_API_BASE_URL=https://<fly-app>.fly.dev`
+   - Environment Variables: `VITE_API_BASE_URL=https://<owner>-<space-name>.hf.space`
    - Deploy
 
 ### 자주 발생하는 문제
-- **Fly 빌드 OOM**: 빌더 메모리 부족 시 `fly deploy --build-only` 후 따로. 또는 `fly deploy --remote-only` (Fly 빌더 사용)
-- **Demucs OOM 런타임**: 머신 메모리 4GB 로 업그레이드
-- **Vercel build 실패 (pnpm workspace)**: Vercel 의 Root Directory 를 `apps/web` 으로, Build Command 는 자동 검출 (Vite). 만약 실패하면 Build Command 를 `pnpm install --frozen-lockfile=false && pnpm build` 로 명시
-- **CORS 오류**: 백엔드 `main.py` 의 CORS 미들웨어 `allow_origins=["*"]` 가 이미 허용. 만약 막히면 Vercel 도메인 명시
+- **HF Space 빌드 실패**: Space 페이지의 "Logs" 탭 확인. 흔한 원인: ML deps 다운로드 네트워크 지연 (재시도). pip install 메모리 부족이면 Hardware 를 잠시 더 큰 것으로 (현재는 Free 만 사용)
+- **HF Space 권한 오류**: Dockerfile 의 `USER user` 누락 또는 `--chown=user` 미적용 시 빌드/런타임 권한 실패. 현재 Dockerfile 은 모두 적용됨
+- **Vercel build 실패 (pnpm workspace)**: Vercel 의 Root Directory 가 `apps/web` 인지 확인. Build Command 자동 검출 안 되면 `pnpm install --frozen-lockfile=false && pnpm build` 로 명시
+- **CORS 오류**: 백엔드 `main.py` 의 CORS 미들웨어 `allow_origins=["*"]` 가 이미 허용. 막히면 Vercel 도메인 명시
+- **Sleep 후 첫 요청 timeout**: 48시간 미사용 후 wake-up 에 ~30초. 프론트 폴링이 timeout 되면 retry 로직 추가 또는 사용자에게 안내 메시지
+- **저장된 파일이 사라짐**: Space restart 시 ephemeral 디스크 초기화. 의도된 동작. 영속화 필요해지면 §11 핵심 결정 참조
 
 ## 12. 알려진 한계 / 다음에 해야 할 일
 

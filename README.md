@@ -1,18 +1,29 @@
+---
+title: Fana Bass Tabs API
+sdk: docker
+app_port: 8000
+pinned: false
+short_description: 베이스 기타 자동 트랜스크립션 (오디오 → 악보 + 타브)
+---
+
 # Fana Bass Tabs
 
 YouTube/SoundCloud 링크나 음원 파일에서 베이스 기타 파트의 **악보 (MusicXML) 와 타브** 를 자동 생성합니다.
+
+> 위 YAML frontmatter 는 Hugging Face Spaces (Docker SDK) 가 읽는 메타데이터입니다. GitHub 에서는 보이지 않지만 HF Spaces 페이지의 제목/포트 설정에 사용됩니다.
 
 ## 스택
 
 - **Backend**: Python 3.11 / FastAPI / arq (Redis 큐) / Demucs / Basic Pitch / CREPE / music21
 - **Frontend**: TypeScript / Vite / React / OpenSheetMusicDisplay / VexFlow
+- **배포**: Hugging Face Spaces (백엔드) + Vercel (프론트) + Upstash (Redis)
 
 ## 빠른 시작
 
-자세한 셋업/실행 가이드는 [CLAUDE.md](./CLAUDE.md) 참고.
+자세한 셋업/실행/배포 가이드는 [CLAUDE.md](./CLAUDE.md) 참고.
 
 ```bash
-# 1. Redis
+# 1. Redis (로컬 개발용, 배포에는 Upstash 사용)
 docker compose up -d redis
 
 # 2. 백엔드
