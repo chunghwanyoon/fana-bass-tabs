@@ -4,6 +4,13 @@ import { ScoreView } from "./components/ScoreView";
 import { TabView } from "./components/TabView";
 import type { JobAccepted, TranscribeResult } from "./types";
 
+const STAGES = [
+  { id: "downloading", label: "오디오 다운로드" },
+  { id: "separating", label: "베이스 트랙 분리 (Demucs)" },
+  { id: "transcribing", label: "음 추출" },
+  { id: "scoring", label: "악보 생성" },
+] as const;
+
 export function App() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,67 +42,104 @@ export function App() {
   };
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto" }}>
-      <h1>Fana Bass Tabs</h1>
-      <p>YouTube/SoundCloud 링크를 입력하거나 음악 파일을 업로드하세요.</p>
+    <main>
+      <header>
+        <h1>Fana Bass Tabs</h1>
+        <p>YouTube/SoundCloud 링크 또는 음악 파일에서 베이스 악보와 타브를 자동 생성합니다.</p>
+      </header>
 
-      <section style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <input
-          type="url"
-          placeholder="https://youtube.com/..."
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          style={{ flex: 1, padding: 8 }}
-        />
-        <button onClick={handleUrl} disabled={loading || !url}>
-          {loading ? "처리 중..." : "변환"}
-        </button>
-      </section>
+      <section className="card">
+        <div className="row">
+          <input
+            type="url"
+            placeholder="https://youtube.com/watch?v=..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            disabled={loading}
+          />
+          <button onClick={handleUrl} disabled={loading || !url}>
+            {loading ? "처리 중" : "변환"}
+          </button>
+        </div>
 
-      <section style={{ marginBottom: 24 }}>
+        <div className="divider">또는</div>
+
         <input type="file" accept="audio/*" onChange={handleFile} disabled={loading} />
       </section>
 
-      {loading && (
-        <div style={{ marginBottom: 16, opacity: 0.8 }}>
-          처리 중{stage ? ` — ${stageLabel(stage)}` : "..."}
-        </div>
-      )}
-
-      {error && (
-        <div style={{ color: "crimson", marginBottom: 16 }}>오류: {error}</div>
-      )}
+      {loading && <StepProgress current={stage} />}
+      {error && <div className="error">⚠ {error}</div>}
 
       {result && (
         <>
-          <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>
-            튜닝: {result.tuning} · 트랜스크라이버: {result.transcriber} · BPM: {result.bpm.toFixed(1)} · job: {result.job_id}
+          <h2>결과 정보</h2>
+          <div className="card">
+            <div className="meta">
+              <span><strong>BPM</strong> {result.bpm.toFixed(1)}</span>
+              <span><strong>튜닝</strong> {tuningLabel(result.tuning)}</span>
+              <span><strong>트랜스크라이버</strong> {result.transcriber}</span>
+              <span><strong>음 개수</strong> {result.notes.length}</span>
+              <span><strong>job</strong> {result.job_id}</span>
+            </div>
           </div>
-          <h2>스코어</h2>
-          <ScoreView musicxmlUrl={`${API_BASE}${result.musicxml_url}`} />
+
+          <h2>스코어 (베이스 클레프)</h2>
+          <div className="score-wrap">
+            <ScoreView musicxmlUrl={`${API_BASE}${result.musicxml_url}`} />
+          </div>
+
           <h2>베이스 타브</h2>
-          <TabView tab={result.tab} bpm={result.bpm} />
+          <div className="tab-wrap">
+            <TabView tab={result.tab} bpm={result.bpm} />
+          </div>
         </>
       )}
     </main>
   );
 }
 
-function stageLabel(stage: string): string {
-  switch (stage) {
-    case "queued":
-      return "대기 중";
-    case "downloading":
-      return "오디오 다운로드 중";
-    case "separating":
-      return "베이스 트랙 분리 중 (Demucs)";
-    case "transcribing":
-      return "음 추출 중";
-    case "scoring":
-      return "악보 생성 중";
-    case "complete":
-      return "완료";
-    default:
-      return stage;
+function StepProgress({ current }: { current: string | null }) {
+  if (current === null) return null;
+  if (current === "queued") {
+    return (
+      <div className="steps">
+        <div className="step active">
+          <span className="dot" />
+          큐에서 대기 중
+        </div>
+      </div>
+    );
   }
+  if (current === "complete") {
+    return (
+      <div className="steps">
+        {STAGES.map((s) => (
+          <div key={s.id} className="step done">
+            <span className="dot" />
+            {s.label}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const currentIdx = STAGES.findIndex((s) => s.id === current);
+  return (
+    <div className="steps">
+      {STAGES.map((s, i) => {
+        const cls = i < currentIdx ? "done" : i === currentIdx ? "active" : "";
+        return (
+          <div key={s.id} className={`step ${cls}`}>
+            <span className="dot" />
+            {s.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function tuningLabel(t: string): string {
+  if (t === "5string") return "5현 (B-E-A-D-G)";
+  if (t === "4string") return "4현 (E-A-D-G)";
+  return t;
 }

@@ -18,6 +18,7 @@ from api.pipeline import (
     tempo,
     transcribe,
 )
+from api.schemas import Note, TabNote
 
 
 async def run_transcribe(
@@ -56,15 +57,35 @@ async def run_transcribe(
     musicxml_path = score.notes_to_musicxml(notes, job_dir, bpm=bpm)
 
     await stage("complete")
+    # arq msgpack 직렬화는 numpy 타입을 못 받음. 모든 값을 Python 네이티브로 강제 변환.
     return {
-        "job_id": job_id,
-        "notes": [n.model_dump() for n in notes],
-        "tab": [t.model_dump() for t in tab_notes],
+        "job_id": str(job_id),
+        "notes": [_note_to_dict(n) for n in notes],
+        "tab": [_tab_to_dict(t) for t in tab_notes],
         "musicxml_url": f"/files/{job_id}/{musicxml_path.name}",
         "midi_url": f"/files/{job_id}/{midi_path.name}",
-        "tuning": tuning,
-        "transcriber": transcriber,
-        "bpm": bpm,
+        "tuning": str(tuning),
+        "transcriber": str(transcriber),
+        "bpm": float(bpm),
+    }
+
+
+def _note_to_dict(n: Note) -> dict[str, int | float]:
+    return {
+        "pitch": int(n.pitch),
+        "start": float(n.start),
+        "duration": float(n.duration),
+        "velocity": int(n.velocity),
+    }
+
+
+def _tab_to_dict(t: TabNote) -> dict[str, int | float]:
+    return {
+        "string": int(t.string),
+        "fret": int(t.fret),
+        "start": float(t.start),
+        "duration": float(t.duration),
+        "pitch": int(t.pitch),
     }
 
 
