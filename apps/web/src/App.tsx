@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { API_BASE, enqueueFile, enqueueUrl, pollJob } from "./api";
 import { ScoreView } from "./components/ScoreView";
 import { TabView } from "./components/TabView";
@@ -17,6 +17,8 @@ export function App() {
   const [stage, setStage] = useState<string | null>(null);
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const run = async (enqueue: () => Promise<JobAccepted>) => {
     setLoading(true);
@@ -38,24 +40,31 @@ export function App() {
   const handleUrl = () => url && run(() => enqueueUrl(url));
   const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) run(() => enqueueFile(f));
+    if (f) {
+      setFileName(f.name);
+      run(() => enqueueFile(f));
+    }
   };
 
   return (
     <main>
       <header>
-        <h1>Fana Bass Tabs</h1>
+        <h1>
+          <span className="logo">🎸</span> Fana Bass Tabs
+        </h1>
         <p>YouTube/SoundCloud 링크 또는 음악 파일에서 베이스 악보와 타브를 자동 생성합니다.</p>
       </header>
 
-      <section className="card">
+      <section className="card input-card">
+        <label className="field-label">YouTube · SoundCloud URL</label>
         <div className="row">
           <input
             type="url"
-            placeholder="https://youtube.com/watch?v=..."
+            placeholder="https://www.youtube.com/watch?v=..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={loading}
+            onKeyDown={(e) => e.key === "Enter" && handleUrl()}
           />
           <button onClick={handleUrl} disabled={loading || !url}>
             {loading ? "처리 중" : "변환"}
@@ -64,7 +73,27 @@ export function App() {
 
         <div className="divider">또는</div>
 
-        <input type="file" accept="audio/*" onChange={handleFile} disabled={loading} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          onChange={handleFile}
+          disabled={loading}
+          style={{ display: "none" }}
+        />
+        <button
+          type="button"
+          className="file-button"
+          onClick={() => fileRef.current?.click()}
+          disabled={loading}
+        >
+          📁 음악 파일 업로드
+        </button>
+        {fileName && <div className="file-name">{fileName}</div>}
+
+        <div className="hint">
+          짧은 곡 (30초 ~ 2분) 으로 시작하는 걸 추천합니다. 첫 변환은 모델 로드로 시간이 더 걸려요.
+        </div>
       </section>
 
       {loading && <StepProgress current={stage} />}
@@ -79,7 +108,7 @@ export function App() {
               <span><strong>튜닝</strong> {tuningLabel(result.tuning)}</span>
               <span><strong>트랜스크라이버</strong> {result.transcriber}</span>
               <span><strong>음 개수</strong> {result.notes.length}</span>
-              <span><strong>job</strong> {result.job_id}</span>
+              <span className="job-id"><strong>job</strong> {result.job_id}</span>
             </div>
           </div>
 
