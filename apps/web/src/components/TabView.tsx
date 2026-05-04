@@ -1,13 +1,8 @@
 import { useEffect, useRef } from "react";
-import {
-  Formatter,
-  Renderer,
-  Stave,
-  TabNote as VfTabNote,
-  TabStave,
-  Voice,
-} from "vexflow";
+import { Vex } from "vexflow";
 import type { TabNote } from "../types";
+
+const { Formatter, Renderer, Stave, TabNote: VfTabNote, TabStave, Voice } = Vex.Flow;
 
 const BEATS_PER_MEASURE = 4;
 const LINE_HEIGHT = 140;
