@@ -1,8 +1,14 @@
 import { useEffect, useRef } from "react";
-import { Vex } from "vexflow";
+import {
+  Formatter,
+  Renderer,
+  TabNote as VfTabNote,
+  TabStave,
+  Voice,
+  VoiceMode,
+} from "vexflow";
+import type { Stave } from "vexflow";
 import type { TabNote } from "../types";
-
-const { Formatter, Renderer, Stave, TabNote: VfTabNote, TabStave, Voice } = Vex.Flow;
 
 const BEATS_PER_MEASURE = 4;
 const LINE_HEIGHT = 140;
@@ -48,7 +54,7 @@ export function TabView({ tab, bpm }: { tab: TabNote[]; bpm: number }) {
       const totalBeats = line.reduce((s, t) => s + t.beats, 0);
       const numBeats = Math.max(Math.round(totalBeats), 1);
       const voice = new Voice({ num_beats: numBeats, beat_value: 4 });
-      voice.setMode(Voice.Mode.SOFT);
+      voice.setMode(VoiceMode.SOFT);
       voice.addTickables(vfNotes);
       new Formatter().joinVoices([voice]).format([voice], width - 100);
       voice.draw(ctx, stave as unknown as Stave);
