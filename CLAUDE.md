@@ -275,7 +275,8 @@ cd apps/web && pnpm dev    # http://localhost:5173
 8. **저장 정책** — 현재 산출물이 영원히 디스크에 남음. arq 의 `keep_result` 만 1시간이고 파일은 영구. 잡 만료 시 청소 크론 필요
 9. **인증** — 현재 없음. 외부 공개시 필요
 10. **모델 프리페치** — 첫 요청에서 Demucs/CREPE 모델을 다운로드 (~150MB). 워커 startup 훅에서 미리 로드하면 사용자 첫 요청 지연 감소
-11. **TabView 정확도** — VexFlow `Voice.Mode.SOFT` 로 박자 검증을 끔. 마디 안에서 노트가 꽉 채우지 않아도 그대로 그림. 마디 정렬과 쉼표 삽입 개선 필요
+11. **TabView 정확도** — VexFlow `Voice.Mode.SOFT` 로 박자 검증을 끔. 마디 안에서 노트가 꽉 채우지 않아도 그대로 그림. 마디 정렬과 쉼표 정렬 개선 필요
+12. **YouTube 봇 차단** — HF Space 같은 데이터센터 IP 에서 yt-dlp 가 "Sign in to confirm you're not a bot" 으로 자주 막힘. `download.py`/`probe.py` 에 `extractor_args` 로 ios/mweb/web/android 클라이언트 폴백 시도하지만 100% 보장 안 됨. 막히면 사용자에게 한글 안내 메시지 + 파일 업로드 권장. 추후 개선 옵션: cookies-from-browser, po_token, 또는 인증 게이트 추가
 
 ## 13. LLM 작업 시 주의사항
 

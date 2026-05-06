@@ -7,7 +7,14 @@ import yt_dlp
 
 
 class DurationError(Exception):
-    """다운로드 받기 전에 거절되는 길이 검증 실패."""
+    """다운로드 받기 전에 거절되는 길이 검증 실패 또는 메타데이터 실패."""
+
+
+_BOT_HINTS = (
+    "confirm you're not a bot",
+    "Sign in to confirm",
+    "cookies",
+)
 
 
 def get_url_duration(url: str) -> float:
@@ -17,10 +24,25 @@ def get_url_duration(url: str) -> float:
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": False,
+        # YouTube 봇 차단 우회 — download.py 와 동일 설정
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "mweb", "web", "android"],
+            }
+        },
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
+    except yt_dlp.DownloadError as e:
+        msg = str(e)
+        if any(h in msg for h in _BOT_HINTS):
+            raise DurationError(
+                "YouTube 가 봇 차단 모드를 활성화했습니다. "
+                "다른 영상으로 시도하거나, 음악 파일을 직접 업로드해주세요. "
+                "(이 문제는 데이터센터 IP 에서 자주 발생합니다)"
+            ) from e
+        raise DurationError(f"URL 메타데이터 추출 실패: {msg}") from e
     except Exception as e:
         raise DurationError(f"URL 메타데이터 추출 실패: {e}") from e
 
