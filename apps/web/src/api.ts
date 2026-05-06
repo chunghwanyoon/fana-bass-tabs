@@ -4,13 +4,24 @@ import type { JobAccepted, JobStatusResponse, TranscribeResult } from "./types";
 // 프로덕션 (Vercel): VITE_API_BASE_URL=https://<your-app>.fly.dev 등 절대 URL 주입
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
+async function parseError(res: Response): Promise<string> {
+  // FastAPI HTTPException 은 {"detail": "..."} 로 옴
+  try {
+    const body = await res.json();
+    if (typeof body.detail === "string") return body.detail;
+    return JSON.stringify(body);
+  } catch {
+    return await res.text();
+  }
+}
+
 export async function enqueueUrl(url: string): Promise<JobAccepted> {
   const res = await fetch(`${API_BASE}/transcribe/url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source_url: url }),
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
 
@@ -18,13 +29,13 @@ export async function enqueueFile(file: File): Promise<JobAccepted> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/transcribe/file`, { method: "POST", body: form });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
 
 export async function getJob(jobId: string): Promise<JobStatusResponse> {
   const res = await fetch(`${API_BASE}/jobs/${jobId}`);
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
 

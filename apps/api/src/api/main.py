@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.config import settings
+from api.pipeline import probe
 from api.schemas import (
     JobAccepted,
     JobStatusResponse,
@@ -58,6 +59,13 @@ def health() -> dict[str, str]:
 
 @app.post("/transcribe/url", response_model=JobAccepted)
 async def transcribe_url(req: TranscribeRequest, request: Request) -> JobAccepted:
+    # 다운로드 받기 전에 길이 검증
+    try:
+        duration = probe.get_url_duration(str(req.source_url))
+    except probe.DurationError as e:
+        raise HTTPException(400, str(e)) from e
+    _check_duration(duration)
+
     job_id, _ = _new_job()
     pool = _arq(request)
     await pool.enqueue_job(
@@ -81,6 +89,19 @@ async def transcribe_file(
     job_id, job_dir = _new_job()
     audio_path = job_dir / file.filename
     audio_path.write_bytes(await file.read())
+
+    # 저장 후 길이 검증. 실패 시 파일 삭제하고 에러
+    try:
+        duration = probe.get_file_duration(audio_path)
+    except probe.DurationError as e:
+        audio_path.unlink(missing_ok=True)
+        raise HTTPException(400, str(e)) from e
+    try:
+        _check_duration(duration)
+    except HTTPException:
+        audio_path.unlink(missing_ok=True)
+        raise
+
     pool = _arq(request)
     await pool.enqueue_job(
         "run_transcribe",
@@ -92,6 +113,16 @@ async def transcribe_file(
         _job_id=job_id,
     )
     return JobAccepted(job_id=job_id)
+
+
+def _check_duration(duration: float) -> None:
+    if duration > settings.max_duration_sec:
+        raise HTTPException(
+            400,
+            f"오디오 길이 {probe.format_duration(duration)} 가 제한 "
+            f"{probe.format_duration(settings.max_duration_sec)} 를 초과합니다. "
+            "더 짧은 음원으로 시도해주세요.",
+        )
 
 
 @app.get("/jobs/{job_id}", response_model=JobStatusResponse)

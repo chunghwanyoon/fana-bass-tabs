@@ -3,6 +3,8 @@
 실행: `arq api.worker.WorkerSettings`
 """
 
+import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,8 @@ from api.pipeline import (
     transcribe,
 )
 from api.schemas import Note, TabNote
+
+logger = logging.getLogger("api.worker")
 
 
 async def run_transcribe(
@@ -57,8 +61,8 @@ async def run_transcribe(
     musicxml_path = score.notes_to_musicxml(notes, job_dir, bpm=bpm)
 
     await stage("complete")
-    # arq msgpack 직렬화는 numpy 타입을 못 받음. 모든 값을 Python 네이티브로 강제 변환.
-    return {
+
+    result = {
         "job_id": str(job_id),
         "notes": [_note_to_dict(n) for n in notes],
         "tab": [_tab_to_dict(t) for t in tab_notes],
@@ -68,6 +72,14 @@ async def run_transcribe(
         "transcriber": str(transcriber),
         "bpm": float(bpm),
     }
+
+    # 마지막 보루: JSON round-trip 으로 모든 값을 무조건 JSON-호환 (=msgpack-호환) 으로
+    # 강제 변환. numpy 스칼라 등이 어디서 새 들어왔어도 여기서 잡힘.
+    try:
+        return json.loads(json.dumps(result, default=_json_fallback))
+    except Exception:
+        logger.exception("[run_transcribe] JSON 직렬화 실패. result keys=%s", list(result.keys()))
+        raise
 
 
 def _note_to_dict(n: Note) -> dict[str, int | float]:
@@ -89,9 +101,26 @@ def _tab_to_dict(t: TabNote) -> dict[str, int | float]:
     }
 
 
+def _json_fallback(obj: Any) -> Any:
+    """numpy 등 JSON 이 모르는 타입을 Python 네이티브로 변환."""
+    # numpy 스칼라/배열
+    if hasattr(obj, "item"):
+        try:
+            return obj.item()
+        except Exception:
+            pass
+    if hasattr(obj, "tolist"):
+        try:
+            return obj.tolist()
+        except Exception:
+            pass
+    # Path, etc.
+    return str(obj)
+
+
 class WorkerSettings:
     functions = [run_transcribe]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    job_timeout = 1800     # 30분 (긴 곡 + 첫 모델 다운로드 여유)
-    max_jobs = 1           # ML 무거우므로 동시 1개만
-    keep_result = 3600     # 결과 1시간 보관
+    job_timeout = 1800     # 30분
+    max_jobs = 1
+    keep_result = 3600
