@@ -18,11 +18,16 @@ async function parseError(res: Response): Promise<string> {
 export async function enqueueUrl(
   url: string,
   timeSignature: string = "4/4",
+  transcriber: string = "basic_pitch",
 ): Promise<JobAccepted> {
   const res = await fetch(`${API_BASE}/transcribe/url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source_url: url, time_signature: timeSignature }),
+    body: JSON.stringify({
+      source_url: url,
+      time_signature: timeSignature,
+      transcriber,
+    }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -31,10 +36,14 @@ export async function enqueueUrl(
 export async function enqueueFile(
   file: File,
   timeSignature: string = "4/4",
+  transcriber: string = "basic_pitch",
 ): Promise<JobAccepted> {
   const form = new FormData();
   form.append("file", file);
-  const params = new URLSearchParams({ time_signature: timeSignature });
+  const params = new URLSearchParams({
+    time_signature: timeSignature,
+    transcriber,
+  });
   const res = await fetch(`${API_BASE}/transcribe/file?${params}`, {
     method: "POST",
     body: form,

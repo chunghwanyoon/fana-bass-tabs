@@ -32,6 +32,21 @@ export const TIME_SIGNATURES: TimeSignature[] = [
   "12/8",
 ];
 
+export type Transcriber = "basic_pitch" | "crepe";
+
+export const TRANSCRIBERS: { id: Transcriber; label: string; hint: string }[] = [
+  {
+    id: "basic_pitch",
+    label: "Basic Pitch",
+    hint: "다성부용. 노이즈에 강하지만 하모닉을 별개 노트로 검출하는 경향 있음",
+  },
+  {
+    id: "crepe",
+    label: "CREPE",
+    hint: "단성부 전용. 깨끗한 베이스 라인엔 더 정확하지만 분리 잔여 노이즈에 약함",
+  },
+];
+
 export type TranscribeResult = {
   job_id: string;
   notes: Note[];

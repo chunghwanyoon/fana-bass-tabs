@@ -93,6 +93,12 @@ def _frames_to_notes(midi_pitches, times) -> list[Note]:
     return notes
 
 
+# 베이스 음역. 5현 베이스 (B0=23) ~ G string 24프렛 (G4=67).
+# 이 범위 밖 노트는 거의 확실히 트랜스크립션 노이즈/하모닉 오류
+BASS_MIDI_MIN = 23
+BASS_MIDI_MAX = 67
+
+
 def load_notes(midi_path: Path) -> list[Note]:
     pm = pretty_midi.PrettyMIDI(str(midi_path))
     notes: list[Note] = []
@@ -107,7 +113,21 @@ def load_notes(midi_path: Path) -> list[Note]:
                 )
             )
     notes.sort(key=lambda n: n.start)
+    notes = filter_bass_range(notes)
     return clean_notes(notes)
+
+
+def filter_bass_range(
+    notes: list[Note],
+    min_midi: int = BASS_MIDI_MIN,
+    max_midi: int = BASS_MIDI_MAX,
+) -> list[Note]:
+    """베이스 음역 밖 노트 제거.
+
+    Basic Pitch 는 다성부 모델이라 베이스 라인의 하모닉 (옥타브, 5도 위) 을
+    별개 노트로 검출하는 경향이 있음. 이 노이즈를 제거.
+    """
+    return [n for n in notes if min_midi <= n.pitch <= max_midi]
 
 
 def clean_notes(

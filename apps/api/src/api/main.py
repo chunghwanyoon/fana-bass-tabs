@@ -105,15 +105,16 @@ async def transcribe_file(
         raise
 
     pool = _arq(request)
-    # 파일 업로드는 multipart/form-data 라 박자 옵션은 query string 으로 받음
+    # 파일 업로드는 multipart/form-data 라 옵션들은 query string 으로 받음
     ts = request.query_params.get("time_signature") or settings.time_signature
+    tr = request.query_params.get("transcriber") or settings.transcriber
     await pool.enqueue_job(
         "run_transcribe",
         job_id=job_id,
         audio_path=str(audio_path),
         url=None,
         title=Path(file.filename).stem,
-        transcriber=settings.transcriber,
+        transcriber=tr,
         tuning=settings.bass_tuning,
         time_signature=ts,
         _job_id=job_id,

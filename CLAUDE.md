@@ -265,7 +265,12 @@ cd apps/web && pnpm dev    # http://localhost:5173
 
 작업 우선순위 순:
 
-1. **두 트랜스크라이버 비교 평가** — 같은 입력에 대해 Basic Pitch vs CREPE 결과를 비교. 베이스에 더 정확한 쪽이 기본값. 평가 스크립트 + 샘플 데이터 필요
+1. **트랜스크립션 품질 개선 — 가장 중요한 미해결 이슈**:
+   - Basic Pitch 가 다성부용이라 베이스 라인의 하모닉을 별개 노트로 잡는 경향. `transcribe.filter_bass_range` (MIDI 23~67) 로 1차 정제하지만 음역 안의 옥타브 오류는 못 잡음
+   - 옥타브 보정 휴리스틱 (median pitch 기준 ±octave 거리 계산해서 outlier 보정) 추가 가치 있음. 단 false positive 위험 큼
+   - CREPE 옵션도 노출했지만 Demucs 분리 잔여 노이즈에 약해 곡에 따라 더 나쁠 수 있음
+   - madmom 같은 박자 추정 + 실제 베이스 트랜스크립션 ML 모델 (예: omnizart, MT3) 도입은 deps 무거움. 필요 시 별도 워커로 분리
+   - 평가 스크립트 + 샘플 데이터로 Basic Pitch vs CREPE vs 후처리 조합별 정확도 측정 필요
 2. **테스트** — 백엔드/프론트 모두 테스트 부재. 최소한 `fretboard.choose_positions`, `tempo.estimate_bpm`, `secondsToVexflow` 같은 순수 함수부터 단위 테스트
 3. **프렛 위치 알고리즘 개선** — 현재는 단순 그리디. 가능하면 동적 계획법으로 전체 시퀀스 비용 최소화. 코드/오픈 포지션 가중치도 추가 고려
 4. **노트 그루핑** — 트랜스크립션 결과가 매우 짧은 노트들 (글리치) 로 잘게 쪼개질 수 있음. `transcribe.load_notes` 출력에 후처리 (짧은 노트 병합/제거) 필요할 수 있음

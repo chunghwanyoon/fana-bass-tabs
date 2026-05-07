@@ -4,8 +4,10 @@ import { ScoreView } from "./components/ScoreView";
 import { TabView } from "./components/TabView";
 import {
   TIME_SIGNATURES,
+  TRANSCRIBERS,
   type JobAccepted,
   type TimeSignature,
+  type Transcriber,
   type TranscribeResult,
 } from "./types";
 
@@ -27,6 +29,7 @@ export function App() {
   // 입력 시 박자 선택 (디폴트 4/4). 결과 받은 뒤엔 displayTimeSig 로 표시 변경
   const [inputTimeSig, setInputTimeSig] = useState<TimeSignature>("4/4");
   const [displayTimeSig, setDisplayTimeSig] = useState<TimeSignature>("4/4");
+  const [transcriber, setTranscriber] = useState<Transcriber>("basic_pitch");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const run = async (enqueue: () => Promise<JobAccepted>) => {
@@ -52,12 +55,13 @@ export function App() {
     }
   };
 
-  const handleUrl = () => url && run(() => enqueueUrl(url, inputTimeSig));
+  const handleUrl = () =>
+    url && run(() => enqueueUrl(url, inputTimeSig, transcriber));
   const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
       setFileName(f.name);
-      run(() => enqueueFile(f, inputTimeSig));
+      run(() => enqueueFile(f, inputTimeSig, transcriber));
     }
   };
 
@@ -121,11 +125,29 @@ export function App() {
               ))}
             </select>
           </label>
+          <label className="option">
+            <span className="option-label">트랜스크라이버</span>
+            <select
+              value={transcriber}
+              onChange={(e) => setTranscriber(e.target.value as Transcriber)}
+              disabled={loading}
+              title={TRANSCRIBERS.find((t) => t.id === transcriber)?.hint}
+            >
+              {TRANSCRIBERS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="hint">
           짧은 곡 (30초 ~ 2분) 으로 시작하는 걸 추천합니다. 첫 변환은 모델 로드로 시간이 더 걸려요.
-          박자 자동 추정은 정확도 한계로 미구현 — 곡의 박자를 알면 미리 선택, 모르면 결과에서 변경 가능합니다.
+          {" "}
+          <strong>박자 자동 추정은 미구현</strong> — 곡 박자를 알면 미리 선택, 모르면 결과에서 변경.
+          {" "}
+          <strong>음 추출 품질이 안 맞으면</strong> 트랜스크라이버를 다른 쪽 (Basic Pitch ↔ CREPE) 으로 바꿔 재변환해보세요.
         </div>
       </section>
 
