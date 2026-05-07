@@ -35,6 +35,7 @@ export type JobStatusResponse = {
   job_id: string;
   status: JobStatus;
   stage: string | null;
+  stage_progress: number | null;
   result: TranscribeResult | null;
   error: string | null;
 };

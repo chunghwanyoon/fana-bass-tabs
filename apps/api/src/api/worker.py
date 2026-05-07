@@ -37,30 +37,36 @@ async def run_transcribe(
     job_dir = settings.storage_dir / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    async def stage(name: str) -> None:
+    async def set_stage(name: str) -> None:
         await redis.set(f"job_stage:{job_id}", name, ex=3600)
+        # 새 단계 진입 시 진행률 초기화
+        await redis.set(f"job_progress:{job_id}", "0", ex=3600)
+
+    async def set_progress(pct: int) -> None:
+        await redis.set(f"job_progress:{job_id}", str(int(pct)), ex=3600)
 
     if url is not None:
-        await stage("downloading")
-        path = download.from_url(url, job_dir)
+        await set_stage("downloading")
+        path = await download.from_url(url, job_dir, on_progress=set_progress)
     else:
         assert audio_path is not None
         path = Path(audio_path)
 
-    await stage("separating")
-    bass_path = separate.extract_bass(path, job_dir)
+    await set_stage("separating")
+    bass_path = await separate.extract_bass(path, job_dir, on_progress=set_progress)
 
-    await stage("transcribing")
+    await set_stage("transcribing")
     midi_path = transcribe.to_midi(bass_path, job_dir, backend=transcriber)
     notes = transcribe.load_notes(midi_path)
 
-    await stage("scoring")
+    await set_stage("scoring")
     bpm = tempo.estimate_bpm(bass_path)
     tuning_spec = fretboard.get_tuning(tuning)
     tab_notes = tab.notes_to_tab(notes, tuning_spec)
     musicxml_path = score.notes_to_musicxml(notes, job_dir, bpm=bpm)
 
-    await stage("complete")
+    await set_stage("complete")
+    await set_progress(100)
 
     result = {
         "job_id": str(job_id),
@@ -73,8 +79,7 @@ async def run_transcribe(
         "bpm": float(bpm),
     }
 
-    # 마지막 보루: JSON round-trip 으로 모든 값을 무조건 JSON-호환 (=msgpack-호환) 으로
-    # 강제 변환. numpy 스칼라 등이 어디서 새 들어왔어도 여기서 잡힘.
+    # 마지막 보루: JSON round-trip 으로 모든 값을 강제로 JSON-호환 (=msgpack-호환) 으로
     try:
         return json.loads(json.dumps(result, default=_json_fallback))
     except Exception:
@@ -103,7 +108,6 @@ def _tab_to_dict(t: TabNote) -> dict[str, int | float]:
 
 def _json_fallback(obj: Any) -> Any:
     """numpy 등 JSON 이 모르는 타입을 Python 네이티브로 변환."""
-    # numpy 스칼라/배열
     if hasattr(obj, "item"):
         try:
             return obj.item()
@@ -114,13 +118,12 @@ def _json_fallback(obj: Any) -> Any:
             return obj.tolist()
         except Exception:
             pass
-    # Path, etc.
     return str(obj)
 
 
 class WorkerSettings:
     functions = [run_transcribe]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    job_timeout = 1800     # 30분
+    job_timeout = 1800
     max_jobs = 1
     keep_result = 3600

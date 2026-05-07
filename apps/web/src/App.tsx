@@ -5,16 +5,17 @@ import { TabView } from "./components/TabView";
 import type { JobAccepted, TranscribeResult } from "./types";
 
 const STAGES = [
-  { id: "downloading", label: "오디오 다운로드" },
-  { id: "separating", label: "베이스 트랙 분리 (Demucs)" },
-  { id: "transcribing", label: "음 추출" },
-  { id: "scoring", label: "악보 생성" },
+  { id: "downloading", label: "오디오 다운로드", measurable: true },
+  { id: "separating", label: "베이스 트랙 분리 (Demucs)", measurable: true },
+  { id: "transcribing", label: "음 추출", measurable: false },
+  { id: "scoring", label: "악보 생성", measurable: false },
 ] as const;
 
 export function App() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -25,15 +26,20 @@ export function App() {
     setError(null);
     setResult(null);
     setStage("queued");
+    setProgress(null);
     try {
       const { job_id } = await enqueue();
-      const r = await pollJob(job_id, setStage);
+      const r = await pollJob(job_id, (s, p) => {
+        setStage(s);
+        setProgress(p);
+      });
       setResult(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
       setStage(null);
+      setProgress(null);
     }
   };
 
@@ -96,7 +102,7 @@ export function App() {
         </div>
       </section>
 
-      {loading && <StepProgress current={stage} />}
+      {loading && <StepProgress current={stage} progress={progress} />}
       {error && <div className="error">⚠ {error}</div>}
 
       {result && (
@@ -151,14 +157,21 @@ function VersionBadge() {
   );
 }
 
-function StepProgress({ current }: { current: string | null }) {
+function StepProgress({
+  current,
+  progress,
+}: {
+  current: string | null;
+  progress: number | null;
+}) {
   if (current === null) return null;
   if (current === "queued") {
     return (
       <div className="steps">
         <div className="step active">
           <span className="dot" />
-          큐에서 대기 중
+          <span className="step-label">큐에서 대기 중</span>
+          <Bar progress={null} />
         </div>
       </div>
     );
@@ -169,7 +182,8 @@ function StepProgress({ current }: { current: string | null }) {
         {STAGES.map((s) => (
           <div key={s.id} className="step done">
             <span className="dot" />
-            {s.label}
+            <span className="step-label">{s.label}</span>
+            <Bar progress={100} done />
           </div>
         ))}
       </div>
@@ -179,14 +193,57 @@ function StepProgress({ current }: { current: string | null }) {
   return (
     <div className="steps">
       {STAGES.map((s, i) => {
-        const cls = i < currentIdx ? "done" : i === currentIdx ? "active" : "";
+        const isDone = i < currentIdx;
+        const isActive = i === currentIdx;
+        const cls = isDone ? "done" : isActive ? "active" : "";
+        let barProgress: number | null = null;
+        if (isDone) barProgress = 100;
+        else if (isActive) {
+          // 측정 가능한 단계는 실제 %, 아니면 indeterminate (null)
+          barProgress = s.measurable ? (progress ?? 0) : null;
+        } else barProgress = 0;
         return (
           <div key={s.id} className={`step ${cls}`}>
             <span className="dot" />
-            {s.label}
+            <span className="step-label">{s.label}</span>
+            <Bar
+              progress={barProgress}
+              done={isDone}
+              indeterminate={isActive && !s.measurable}
+            />
+            {isActive && s.measurable && progress !== null && (
+              <span className="step-pct">{progress}%</span>
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function Bar({
+  progress,
+  done = false,
+  indeterminate = false,
+}: {
+  progress: number | null;
+  done?: boolean;
+  indeterminate?: boolean;
+}) {
+  if (indeterminate) {
+    return (
+      <div className="bar">
+        <div className="bar-fill bar-indeterminate" />
+      </div>
+    );
+  }
+  const pct = progress === null ? 0 : Math.max(0, Math.min(100, progress));
+  return (
+    <div className="bar">
+      <div
+        className={`bar-fill${done ? " bar-done" : ""}`}
+        style={{ width: `${pct}%` }}
+      />
     </div>
   );
 }

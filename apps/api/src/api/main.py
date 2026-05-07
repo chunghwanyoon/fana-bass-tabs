@@ -134,8 +134,20 @@ async def get_job(job_id: str, request: Request) -> JobStatusResponse:
     raw_stage = await pool.get(f"job_stage:{job_id}")
     stage = raw_stage.decode() if isinstance(raw_stage, bytes) else raw_stage
 
+    raw_progress = await pool.get(f"job_progress:{job_id}")
+    progress: int | None = None
+    if raw_progress is not None:
+        try:
+            progress = int(
+                raw_progress.decode() if isinstance(raw_progress, bytes) else raw_progress
+            )
+        except (ValueError, AttributeError):
+            progress = None
+
     if info is None:
-        return JobStatusResponse(job_id=job_id, status="not_found", stage=stage)
+        return JobStatusResponse(
+            job_id=job_id, status="not_found", stage=stage, stage_progress=progress
+        )
 
     status = await job.status()
 
@@ -144,16 +156,22 @@ async def get_job(job_id: str, request: Request) -> JobStatusResponse:
             result_data = await job.result(timeout=0)
         except Exception as e:
             return JobStatusResponse(
-                job_id=job_id, status="failed", stage=stage, error=str(e)
+                job_id=job_id, status="failed", stage=stage,
+                stage_progress=progress, error=str(e)
             )
         return JobStatusResponse(
             job_id=job_id,
             status="complete",
             stage=stage,
+            stage_progress=progress,
             result=TranscribeResult(**result_data),
         )
 
     if status == JobStatus.in_progress:
-        return JobStatusResponse(job_id=job_id, status="running", stage=stage)
+        return JobStatusResponse(
+            job_id=job_id, status="running", stage=stage, stage_progress=progress
+        )
 
-    return JobStatusResponse(job_id=job_id, status="queued", stage=stage)
+    return JobStatusResponse(
+        job_id=job_id, status="queued", stage=stage, stage_progress=progress
+    )

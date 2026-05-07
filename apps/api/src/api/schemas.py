@@ -49,5 +49,6 @@ class JobStatusResponse(BaseModel):
     job_id: str
     status: JobStatusLiteral
     stage: str | None = None
+    stage_progress: int | None = None  # 0-100. None 이면 indeterminate
     result: TranscribeResult | None = None
     error: str | None = None

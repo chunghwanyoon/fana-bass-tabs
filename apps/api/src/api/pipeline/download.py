@@ -1,7 +1,11 @@
+import asyncio
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import yt_dlp
+
+ProgressCb = Callable[[int], Awaitable[None]]
 
 
 def clean_url(url: str) -> str:
@@ -20,7 +24,7 @@ def clean_url(url: str) -> str:
     if "v" not in qs:
         return url
     new_qs = {"v": qs["v"][0]}
-    if "t" in qs:  # 시작 시간은 보존
+    if "t" in qs:
         new_qs["t"] = qs["t"][0]
     return urlunparse(parsed._replace(query=urlencode(new_qs)))
 
@@ -30,11 +34,10 @@ def yt_dlp_opts(extra: dict | None = None) -> dict:
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
-        "noplaylist": True,           # 항상 단일 영상으로 처리
+        "noplaylist": True,
         "socket_timeout": 30,
         "retries": 3,
         "fragment_retries": 3,
-        # YouTube 봇 차단 우회: 데이터센터 IP 에서도 통과 가능성 높은 클라이언트들
         "extractor_args": {
             "youtube": {
                 "player_client": ["ios", "mweb", "web", "android"],
@@ -46,21 +49,55 @@ def yt_dlp_opts(extra: dict | None = None) -> dict:
     return opts
 
 
-def from_url(url: str, out_dir: Path) -> Path:
-    """YouTube/SoundCloud 등에서 오디오를 받아 wav로 저장."""
-    url = clean_url(url)
+async def from_url(
+    url: str, out_dir: Path, on_progress: ProgressCb | None = None
+) -> Path:
+    """YouTube/SoundCloud 등에서 오디오를 받아 wav로 저장.
+
+    on_progress 가 주어지면 다운로드 진행률 (0-100) 을 비동기 콜백으로 전달.
+    """
+    cleaned = clean_url(url)
     out_template = str(out_dir / "source.%(ext)s")
-    opts = yt_dlp_opts({
-        "format": "bestaudio/best",
-        "outtmpl": out_template,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "wav",
-                "preferredquality": "192",
-            }
-        ],
-    })
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+
+    # 별도 스레드의 yt-dlp 가 sync hook 으로 갱신할 진행률 박스
+    pct_box = [0]
+
+    def hook(d: dict) -> None:
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            done = d.get("downloaded_bytes")
+            if total and done:
+                pct_box[0] = min(99, int(done / total * 100))
+        elif d.get("status") == "finished":
+            pct_box[0] = 100
+
+    opts = yt_dlp_opts(
+        {
+            "format": "bestaudio/best",
+            "outtmpl": out_template,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav",
+                    "preferredquality": "192",
+                }
+            ],
+            "progress_hooks": [hook],
+        }
+    )
+
+    def _run() -> None:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([cleaned])
+
+    task = asyncio.create_task(asyncio.to_thread(_run))
+    if on_progress is not None:
+        last = -1
+        while not task.done():
+            cur = pct_box[0]
+            if cur != last:
+                await on_progress(cur)
+                last = cur
+            await asyncio.sleep(0.3)
+    await task  # 예외 전파
     return out_dir / "source.wav"

@@ -41,13 +41,13 @@ export async function getJob(jobId: string): Promise<JobStatusResponse> {
 
 export async function pollJob(
   jobId: string,
-  onStage: (stage: string | null) => void,
-  intervalMs = 1500,
+  onUpdate: (stage: string | null, progress: number | null) => void,
+  intervalMs = 1000,
 ): Promise<TranscribeResult> {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const s = await getJob(jobId);
-    onStage(s.stage);
+    onUpdate(s.stage, s.stage_progress);
     if (s.status === "complete" && s.result) return s.result;
     if (s.status === "failed") throw new Error(s.error || "Job failed");
     if (s.status === "not_found") throw new Error("Job not found");
