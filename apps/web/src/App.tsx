@@ -107,7 +107,7 @@ export function App() {
 
       {result && (
         <>
-          <h2>결과 정보</h2>
+          {result.title && <h2 className="result-title">{result.title}</h2>}
           <div className="card">
             <div className="meta">
               <span><strong>BPM</strong> {result.bpm.toFixed(1)}</span>

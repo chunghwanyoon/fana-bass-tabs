@@ -107,4 +107,36 @@ def load_notes(midi_path: Path) -> list[Note]:
                 )
             )
     notes.sort(key=lambda n: n.start)
-    return notes
+    return clean_notes(notes)
+
+
+def clean_notes(
+    notes: list[Note],
+    min_dur: float = 0.06,        # 60ms 미만은 노이즈로 간주
+    merge_gap: float = 0.03,      # 30ms 이내 같은 음은 병합
+) -> list[Note]:
+    """글리치/스푸리어스 노트 제거 + 인접 동일 피치 병합.
+
+    Basic Pitch 가 폴리포닉 가정으로 동작해서 단성부 베이스에서도 한 음을
+    여러 짧은 노트로 쪼개는 경향이 있음. 합쳐서 가독성 향상.
+    """
+    if not notes:
+        return notes
+    notes = sorted(notes, key=lambda n: n.start)
+
+    merged: list[Note] = []
+    for n in notes:
+        if merged and merged[-1].pitch == n.pitch:
+            prev = merged[-1]
+            gap = n.start - (prev.start + prev.duration)
+            if gap < merge_gap:
+                merged[-1] = Note(
+                    pitch=prev.pitch,
+                    start=prev.start,
+                    duration=(n.start + n.duration) - prev.start,
+                    velocity=max(prev.velocity, n.velocity),
+                )
+                continue
+        merged.append(n)
+
+    return [n for n in merged if n.duration >= min_dur]

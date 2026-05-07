@@ -11,7 +11,8 @@ import type { Stave } from "vexflow";
 import type { TabNote } from "../types";
 
 const BEATS_PER_MEASURE = 4;
-const LINE_HEIGHT = 140;
+const LINE_HEIGHT = 130;
+const STAVE_PADDING = 30;
 
 type TimedTab = TabNote & { beats: number; vexDur: string };
 
@@ -31,16 +32,22 @@ export function TabView({ tab, bpm }: { tab: TabNote[]; bpm: number }) {
 
     const measures = packMeasures(timed, BEATS_PER_MEASURE);
     const width = 900;
-    const height = LINE_HEIGHT * measures.length + 20;
+    const height = LINE_HEIGHT * measures.length + STAVE_PADDING;
 
     const renderer = new Renderer(ref.current, Renderer.Backends.SVG);
     renderer.resize(width, height);
     const ctx = renderer.getContext();
 
     measures.forEach((line, idx) => {
-      const y = 20 + idx * LINE_HEIGHT;
+      const y = STAVE_PADDING + idx * LINE_HEIGHT;
       const stave = new TabStave(10, y, width - 20);
-      if (idx === 0) stave.addClef("tab");
+
+      // 첫 마디에만 클레프 + 시그니처. 모든 마디에 마디 번호.
+      if (idx === 0) {
+        stave.addClef("tab");
+        stave.addTimeSignature(`${BEATS_PER_MEASURE}/4`);
+      }
+      stave.setMeasure(idx + 1);
       stave.setContext(ctx).draw();
 
       const vfNotes = line.map(
@@ -98,7 +105,7 @@ const VEX_DURATIONS: { beats: number; dur: string }[] = [
 ];
 
 function secondsToVexflow(beats: number): string {
-  // 로그 거리 기준으로 가장 가까운 표준 음표 길이 선택 (2배/0.5배가 동등하게 멀어짐)
+  // 로그 거리 기준 가장 가까운 표준 음표 길이 (2배/0.5배 동등하게 멀어짐)
   let best = VEX_DURATIONS[0];
   let bestDist = Math.abs(Math.log(beats / best.beats));
   for (const c of VEX_DURATIONS) {

@@ -1,18 +1,28 @@
-"""음 리스트 → MusicXML (베이스 클레프)."""
+"""음 리스트 → MusicXML (베이스 클레프 + 4/4 + 제목 + 템포)."""
 
 from pathlib import Path
 
-from music21 import clef, instrument, note, stream
+from music21 import clef, instrument, metadata, meter, note, stream
 from music21.tempo import MetronomeMark
 
 from api.schemas import Note
 
 
-def notes_to_musicxml(notes: list[Note], out_dir: Path, bpm: float) -> Path:
+def notes_to_musicxml(
+    notes: list[Note],
+    out_dir: Path,
+    bpm: float,
+    title: str = "",
+) -> Path:
     s = stream.Score()
+    s.metadata = metadata.Metadata()
+    s.metadata.title = title or "Untitled"
+    s.metadata.composer = "Fana Bass Tabs"
+
     part = stream.Part()
     part.insert(0, instrument.ElectricBass())
     part.insert(0, clef.BassClef())
+    part.insert(0, meter.TimeSignature("4/4"))
     part.insert(0, MetronomeMark(number=bpm))
 
     qn_per_sec = bpm / 60.0
@@ -24,6 +34,9 @@ def notes_to_musicxml(notes: list[Note], out_dir: Path, bpm: float) -> Path:
         part.insert(offset_q, m21_note)
 
     s.append(part)
+    # 시간 시그니처 기반으로 마디로 분할
+    s.makeMeasures(inPlace=True)
+
     out_path = out_dir / "score.musicxml"
     s.write("musicxml", fp=str(out_path))
     return out_path

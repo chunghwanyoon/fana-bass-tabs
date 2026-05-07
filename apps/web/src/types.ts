@@ -22,6 +22,7 @@ export type TranscribeResult = {
   tuning: string;
   transcriber: string;
   bpm: number;
+  title: string;
 };
 
 export type JobAccepted = {

@@ -1,4 +1,4 @@
-"""오디오 길이 검증. URL 은 yt-dlp metadata, 파일은 librosa 사용."""
+"""오디오 메타데이터 추출. URL 은 yt-dlp, 파일은 librosa."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from api.pipeline.download import clean_url, yt_dlp_opts
 
 
 class DurationError(Exception):
-    """다운로드 받기 전에 거절되는 길이 검증 실패 또는 메타데이터 실패."""
+    """다운로드 받기 전에 거절되는 검증 실패 또는 메타데이터 실패."""
 
 
 _BOT_HINTS = (
@@ -27,8 +27,8 @@ _NETWORK_HINTS = (
 )
 
 
-def get_url_duration(url: str) -> float:
-    """yt-dlp 메타데이터만 추출 (다운로드 X). 길이 (초) 반환."""
+def get_url_metadata(url: str) -> dict:
+    """yt-dlp 메타데이터 추출 (다운로드 X). {'duration', 'title'} 반환."""
     cleaned = clean_url(url)
     opts = yt_dlp_opts({"skip_download": True, "extract_flat": False})
     try:
@@ -54,11 +54,19 @@ def get_url_duration(url: str) -> float:
     duration = info.get("duration")
     if duration is None:
         raise DurationError("영상 길이를 확인할 수 없습니다 (라이브 스트림이거나 메타데이터 누락)")
-    return float(duration)
+    return {
+        "duration": float(duration),
+        "title": str(info.get("title") or ""),
+    }
+
+
+def get_url_duration(url: str) -> float:
+    """레거시 호환. duration 만 필요할 때."""
+    return get_url_metadata(url)["duration"]
 
 
 def get_file_duration(audio_path: Path) -> float:
-    """업로드된 오디오 파일의 길이 (초). librosa.get_duration 사용."""
+    """업로드된 오디오 파일의 길이 (초)."""
     try:
         return float(librosa.get_duration(path=str(audio_path)))
     except Exception as e:
@@ -66,7 +74,6 @@ def get_file_duration(audio_path: Path) -> float:
 
 
 def format_duration(seconds: float) -> str:
-    """초 → "M분 S초" 한글 표기."""
     total = int(round(seconds))
     m, s = divmod(total, 60)
     if m == 0:

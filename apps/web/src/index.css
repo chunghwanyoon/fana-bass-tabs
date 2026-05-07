@@ -388,3 +388,12 @@ button:disabled {
   padding: 16px;
   overflow-x: auto;
 }
+
+.result-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 28px 0 14px;
+  color: var(--text);
+  word-break: break-all;
+}

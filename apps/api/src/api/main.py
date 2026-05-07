@@ -59,12 +59,12 @@ def health() -> dict[str, str]:
 
 @app.post("/transcribe/url", response_model=JobAccepted)
 async def transcribe_url(req: TranscribeRequest, request: Request) -> JobAccepted:
-    # 다운로드 받기 전에 길이 검증
+    # 다운로드 받기 전에 메타데이터 (길이 + 제목) 추출
     try:
-        duration = probe.get_url_duration(str(req.source_url))
+        meta = probe.get_url_metadata(str(req.source_url))
     except probe.DurationError as e:
         raise HTTPException(400, str(e)) from e
-    _check_duration(duration)
+    _check_duration(meta["duration"])
 
     job_id, _ = _new_job()
     pool = _arq(request)
@@ -73,6 +73,7 @@ async def transcribe_url(req: TranscribeRequest, request: Request) -> JobAccepte
         job_id=job_id,
         audio_path=None,
         url=str(req.source_url),
+        title=meta["title"],
         transcriber=req.transcriber or settings.transcriber,
         tuning=req.tuning or settings.bass_tuning,
         _job_id=job_id,
@@ -108,6 +109,7 @@ async def transcribe_file(
         job_id=job_id,
         audio_path=str(audio_path),
         url=None,
+        title=Path(file.filename).stem,  # 확장자 제외한 파일명
         transcriber=settings.transcriber,
         tuning=settings.bass_tuning,
         _job_id=job_id,

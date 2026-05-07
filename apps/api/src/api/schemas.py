@@ -33,6 +33,7 @@ class TranscribeResult(BaseModel):
     tuning: str
     transcriber: str
     bpm: float
+    title: str = ""
 
 
 class JobAccepted(BaseModel):
