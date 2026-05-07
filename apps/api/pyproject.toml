@@ -22,6 +22,9 @@ ml = [
     "demucs>=4.0",
     "basic-pitch>=0.3",
     "crepe>=0.0.13",
+    # torchaudio 2.6+ 가 audio save 를 torchcodec 으로 위임. 명시 안 하면
+    # Demucs 가 베이스 스템 저장 시 ModuleNotFoundError: torchcodec 발생
+    "torchcodec>=0.1",
 ]
 dev = [
     "ruff>=0.4",
