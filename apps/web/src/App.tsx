@@ -123,7 +123,31 @@ export function App() {
           </div>
         </>
       )}
+
+      <VersionBadge />
     </main>
+  );
+}
+
+function VersionBadge() {
+  const builtAt = new Date(__APP_BUILT_AT__);
+  const mm = String(builtAt.getMonth() + 1).padStart(2, "0");
+  const dd = String(builtAt.getDate()).padStart(2, "0");
+  const hh = String(builtAt.getHours()).padStart(2, "0");
+  const min = String(builtAt.getMinutes()).padStart(2, "0");
+  const shortDate = `${mm}/${dd} ${hh}:${min}`;
+  const repoUrl = "https://github.com/chunghwanyoon/fana-bass-tabs";
+  return (
+    <a
+      className="version-badge"
+      href={`${repoUrl}/commit/${__APP_COMMIT__}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`commit ${__APP_COMMIT__} · built ${__APP_BUILT_AT__}`}
+    >
+      <span>v {__APP_COMMIT__}</span>
+      <span className="version-date">{shortDate}</span>
+    </a>
   );
 }
 

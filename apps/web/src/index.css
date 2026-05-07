@@ -221,6 +221,40 @@ button:disabled {
   font-size: 12px;
 }
 
+.version-badge {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 6px 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  text-decoration: none;
+  background: rgba(20, 20, 26, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+  z-index: 100;
+  backdrop-filter: blur(6px);
+}
+
+.version-badge:hover {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.version-date {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
 .error {
   background: rgba(255, 92, 122, 0.1);
   border: 1px solid rgba(255, 92, 122, 0.4);

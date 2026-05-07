@@ -7,3 +7,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// vite.config.ts 의 define 으로 빌드 시점 주입
+declare const __APP_COMMIT__: string;
+declare const __APP_BUILT_AT__: string;
