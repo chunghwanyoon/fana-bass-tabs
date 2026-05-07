@@ -15,20 +15,30 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
-export async function enqueueUrl(url: string): Promise<JobAccepted> {
+export async function enqueueUrl(
+  url: string,
+  timeSignature: string = "4/4",
+): Promise<JobAccepted> {
   const res = await fetch(`${API_BASE}/transcribe/url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source_url: url }),
+    body: JSON.stringify({ source_url: url, time_signature: timeSignature }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
 
-export async function enqueueFile(file: File): Promise<JobAccepted> {
+export async function enqueueFile(
+  file: File,
+  timeSignature: string = "4/4",
+): Promise<JobAccepted> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE}/transcribe/file`, { method: "POST", body: form });
+  const params = new URLSearchParams({ time_signature: timeSignature });
+  const res = await fetch(`${API_BASE}/transcribe/file?${params}`, {
+    method: "POST",
+    body: form,
+  });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

@@ -397,3 +397,59 @@ button:disabled {
   color: var(--text);
   word-break: break-all;
 }
+
+.options-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.option select {
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.option select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.option select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 32px 0 12px;
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--bg-elev);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  color: var(--text-dim);
+}

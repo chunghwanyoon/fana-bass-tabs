@@ -1,4 +1,4 @@
-"""음 리스트 → MusicXML (베이스 클레프 + 4/4 + 제목 + 템포)."""
+"""음 리스트 → MusicXML (베이스 클레프 + 박자 시그니처 + 제목 + 템포)."""
 
 from pathlib import Path
 
@@ -13,6 +13,7 @@ def notes_to_musicxml(
     out_dir: Path,
     bpm: float,
     title: str = "",
+    time_signature: str = "4/4",
 ) -> Path:
     s = stream.Score()
     s.metadata = metadata.Metadata()
@@ -22,7 +23,7 @@ def notes_to_musicxml(
     part = stream.Part()
     part.insert(0, instrument.ElectricBass())
     part.insert(0, clef.BassClef())
-    part.insert(0, meter.TimeSignature("4/4"))
+    part.insert(0, meter.TimeSignature(time_signature))
     part.insert(0, MetronomeMark(number=bpm))
 
     qn_per_sec = bpm / 60.0
@@ -34,7 +35,6 @@ def notes_to_musicxml(
         part.insert(offset_q, m21_note)
 
     s.append(part)
-    # 시간 시그니처 기반으로 마디로 분할
     s.makeMeasures(inPlace=True)
 
     out_path = out_dir / "score.musicxml"

@@ -13,6 +13,25 @@ export type TabNote = {
   pitch: number;
 };
 
+export type TimeSignature =
+  | "4/4"
+  | "3/4"
+  | "6/8"
+  | "2/4"
+  | "5/4"
+  | "7/8"
+  | "12/8";
+
+export const TIME_SIGNATURES: TimeSignature[] = [
+  "4/4",
+  "3/4",
+  "6/8",
+  "2/4",
+  "5/4",
+  "7/8",
+  "12/8",
+];
+
 export type TranscribeResult = {
   job_id: string;
   notes: Note[];
@@ -23,6 +42,7 @@ export type TranscribeResult = {
   transcriber: string;
   bpm: number;
   title: string;
+  time_signature: string;
 };
 
 export type JobAccepted = {

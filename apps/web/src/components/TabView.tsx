@@ -10,13 +10,20 @@ import {
 import type { Stave } from "vexflow";
 import type { TabNote } from "../types";
 
-const BEATS_PER_MEASURE = 4;
 const LINE_HEIGHT = 130;
 const STAVE_PADDING = 30;
 
 type TimedTab = TabNote & { beats: number; vexDur: string };
 
-export function TabView({ tab, bpm }: { tab: TabNote[]; bpm: number }) {
+export function TabView({
+  tab,
+  bpm,
+  timeSignature = "4/4",
+}: {
+  tab: TabNote[];
+  bpm: number;
+  timeSignature?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,13 +31,18 @@ export function TabView({ tab, bpm }: { tab: TabNote[]; bpm: number }) {
     ref.current.innerHTML = "";
     if (tab.length === 0) return;
 
+    // 박자 분자/분모 → 한 마디 안에 들어가는 quarter-note 비트 수
+    // 예) 6/8 → 6 * (4/8) = 3 quarter notes per measure
+    const [num, denom] = parseTimeSig(timeSignature);
+    const beatsPerMeasure = num * (4 / denom);
+
     const beatsPerSecond = bpm / 60;
     const timed: TimedTab[] = tab.map((t) => {
       const beats = Math.max(t.duration * beatsPerSecond, 0.125);
       return { ...t, beats, vexDur: secondsToVexflow(beats) };
     });
 
-    const measures = packMeasures(timed, BEATS_PER_MEASURE);
+    const measures = packMeasures(timed, beatsPerMeasure);
     const width = 900;
     const height = LINE_HEIGHT * measures.length + STAVE_PADDING;
 
@@ -42,10 +54,9 @@ export function TabView({ tab, bpm }: { tab: TabNote[]; bpm: number }) {
       const y = STAVE_PADDING + idx * LINE_HEIGHT;
       const stave = new TabStave(10, y, width - 20);
 
-      // 첫 마디에만 클레프 + 시그니처. 모든 마디에 마디 번호.
       if (idx === 0) {
         stave.addClef("tab");
-        stave.addTimeSignature(`${BEATS_PER_MEASURE}/4`);
+        stave.addTimeSignature(timeSignature);
       }
       stave.setMeasure(idx + 1);
       stave.setContext(ctx).draw();
@@ -66,9 +77,15 @@ export function TabView({ tab, bpm }: { tab: TabNote[]; bpm: number }) {
       new Formatter().joinVoices([voice]).format([voice], width - 100);
       voice.draw(ctx, stave as unknown as Stave);
     });
-  }, [tab, bpm]);
+  }, [tab, bpm, timeSignature]);
 
   return <div ref={ref} style={{ overflowX: "auto" }} />;
+}
+
+function parseTimeSig(ts: string): [number, number] {
+  const [n, d] = ts.split("/").map(Number);
+  if (!n || !d) return [4, 4];
+  return [n, d];
 }
 
 function packMeasures<T extends { beats: number }>(
@@ -105,7 +122,6 @@ const VEX_DURATIONS: { beats: number; dur: string }[] = [
 ];
 
 function secondsToVexflow(beats: number): string {
-  // 로그 거리 기준 가장 가까운 표준 음표 길이 (2배/0.5배 동등하게 멀어짐)
   let best = VEX_DURATIONS[0];
   let bestDist = Math.abs(Math.log(beats / best.beats));
   for (const c of VEX_DURATIONS) {

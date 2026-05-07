@@ -76,6 +76,7 @@ async def transcribe_url(req: TranscribeRequest, request: Request) -> JobAccepte
         title=meta["title"],
         transcriber=req.transcriber or settings.transcriber,
         tuning=req.tuning or settings.bass_tuning,
+        time_signature=req.time_signature or settings.time_signature,
         _job_id=job_id,
     )
     return JobAccepted(job_id=job_id)
@@ -104,14 +105,17 @@ async def transcribe_file(
         raise
 
     pool = _arq(request)
+    # 파일 업로드는 multipart/form-data 라 박자 옵션은 query string 으로 받음
+    ts = request.query_params.get("time_signature") or settings.time_signature
     await pool.enqueue_job(
         "run_transcribe",
         job_id=job_id,
         audio_path=str(audio_path),
         url=None,
-        title=Path(file.filename).stem,  # 확장자 제외한 파일명
+        title=Path(file.filename).stem,
         transcriber=settings.transcriber,
         tuning=settings.bass_tuning,
+        time_signature=ts,
         _job_id=job_id,
     )
     return JobAccepted(job_id=job_id)

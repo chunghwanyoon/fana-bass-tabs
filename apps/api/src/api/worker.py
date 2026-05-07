@@ -33,6 +33,7 @@ async def run_transcribe(
     transcriber: str,
     tuning: str,
     title: str = "",
+    time_signature: str = "4/4",
 ) -> dict[str, Any]:
     redis = ctx["redis"]
     job_dir = settings.storage_dir / job_id
@@ -64,7 +65,9 @@ async def run_transcribe(
     bpm = tempo.estimate_bpm(bass_path)
     tuning_spec = fretboard.get_tuning(tuning)
     tab_notes = tab.notes_to_tab(notes, tuning_spec)
-    musicxml_path = score.notes_to_musicxml(notes, job_dir, bpm=bpm, title=title)
+    musicxml_path = score.notes_to_musicxml(
+        notes, job_dir, bpm=bpm, title=title, time_signature=time_signature
+    )
 
     await set_stage("complete")
     await set_progress(100)
@@ -79,6 +82,7 @@ async def run_transcribe(
         "transcriber": str(transcriber),
         "bpm": float(bpm),
         "title": str(title or ""),
+        "time_signature": str(time_signature),
     }
 
     # 마지막 보루: JSON round-trip 으로 모든 값을 강제로 JSON-호환 (=msgpack-호환) 으로

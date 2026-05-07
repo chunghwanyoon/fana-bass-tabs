@@ -2,7 +2,12 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { API_BASE, enqueueFile, enqueueUrl, pollJob } from "./api";
 import { ScoreView } from "./components/ScoreView";
 import { TabView } from "./components/TabView";
-import type { JobAccepted, TranscribeResult } from "./types";
+import {
+  TIME_SIGNATURES,
+  type JobAccepted,
+  type TimeSignature,
+  type TranscribeResult,
+} from "./types";
 
 const STAGES = [
   { id: "downloading", label: "오디오 다운로드", measurable: true },
@@ -19,6 +24,9 @@ export function App() {
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  // 입력 시 박자 선택 (디폴트 4/4). 결과 받은 뒤엔 displayTimeSig 로 표시 변경
+  const [inputTimeSig, setInputTimeSig] = useState<TimeSignature>("4/4");
+  const [displayTimeSig, setDisplayTimeSig] = useState<TimeSignature>("4/4");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const run = async (enqueue: () => Promise<JobAccepted>) => {
@@ -34,6 +42,7 @@ export function App() {
         setProgress(p);
       });
       setResult(r);
+      setDisplayTimeSig((r.time_signature as TimeSignature) || inputTimeSig);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -43,12 +52,12 @@ export function App() {
     }
   };
 
-  const handleUrl = () => url && run(() => enqueueUrl(url));
+  const handleUrl = () => url && run(() => enqueueUrl(url, inputTimeSig));
   const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
       setFileName(f.name);
-      run(() => enqueueFile(f));
+      run(() => enqueueFile(f, inputTimeSig));
     }
   };
 
@@ -97,8 +106,26 @@ export function App() {
         </button>
         {fileName && <div className="file-name">{fileName}</div>}
 
+        <div className="options-row">
+          <label className="option">
+            <span className="option-label">박자</span>
+            <select
+              value={inputTimeSig}
+              onChange={(e) => setInputTimeSig(e.target.value as TimeSignature)}
+              disabled={loading}
+            >
+              {TIME_SIGNATURES.map((ts) => (
+                <option key={ts} value={ts}>
+                  {ts}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         <div className="hint">
           짧은 곡 (30초 ~ 2분) 으로 시작하는 걸 추천합니다. 첫 변환은 모델 로드로 시간이 더 걸려요.
+          박자 자동 추정은 정확도 한계로 미구현 — 곡의 박자를 알면 미리 선택, 모르면 결과에서 변경 가능합니다.
         </div>
       </section>
 
@@ -119,13 +146,31 @@ export function App() {
           </div>
 
           <h2>스코어 (베이스 클레프)</h2>
+          <div className="hint" style={{ marginTop: 0 }}>
+            아래 스코어의 박자는 변환 시 선택한 <code>{result.time_signature}</code> 로 고정됩니다. 다른 박자로 다시 받으려면 위에서 박자를 변경하고 재변환하세요.
+          </div>
           <div className="score-wrap">
             <ScoreView musicxmlUrl={`${API_BASE}${result.musicxml_url}`} />
           </div>
 
-          <h2>베이스 타브</h2>
+          <div className="row tab-header">
+            <h2 style={{ margin: 0 }}>베이스 타브</h2>
+            <label className="option">
+              <span className="option-label">박자</span>
+              <select
+                value={displayTimeSig}
+                onChange={(e) => setDisplayTimeSig(e.target.value as TimeSignature)}
+              >
+                {TIME_SIGNATURES.map((ts) => (
+                  <option key={ts} value={ts}>
+                    {ts}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="tab-wrap">
-            <TabView tab={result.tab} bpm={result.bpm} />
+            <TabView tab={result.tab} bpm={result.bpm} timeSignature={displayTimeSig} />
           </div>
         </>
       )}
