@@ -5,6 +5,8 @@ from pathlib import Path
 import librosa
 import yt_dlp
 
+from api.pipeline.download import clean_url, yt_dlp_opts
+
 
 class DurationError(Exception):
     """다운로드 받기 전에 거절되는 길이 검증 실패 또는 메타데이터 실패."""
@@ -16,24 +18,22 @@ _BOT_HINTS = (
     "cookies",
 )
 
+_NETWORK_HINTS = (
+    "UNEXPECTED_EOF_WHILE_READING",
+    "Unable to download API page",
+    "Connection reset",
+    "timed out",
+    "SSLError",
+)
+
 
 def get_url_duration(url: str) -> float:
     """yt-dlp 메타데이터만 추출 (다운로드 X). 길이 (초) 반환."""
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "extract_flat": False,
-        # YouTube 봇 차단 우회 — download.py 와 동일 설정
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["ios", "mweb", "web", "android"],
-            }
-        },
-    }
+    cleaned = clean_url(url)
+    opts = yt_dlp_opts({"skip_download": True, "extract_flat": False})
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(cleaned, download=False)
     except yt_dlp.DownloadError as e:
         msg = str(e)
         if any(h in msg for h in _BOT_HINTS):
@@ -41,6 +41,11 @@ def get_url_duration(url: str) -> float:
                 "YouTube 가 봇 차단 모드를 활성화했습니다. "
                 "다른 영상으로 시도하거나, 음악 파일을 직접 업로드해주세요. "
                 "(이 문제는 데이터센터 IP 에서 자주 발생합니다)"
+            ) from e
+        if any(h in msg for h in _NETWORK_HINTS):
+            raise DurationError(
+                "YouTube 와의 연결이 일시적으로 실패했습니다. "
+                "잠시 후 다시 시도하거나, 음악 파일을 직접 업로드해주세요."
             ) from e
         raise DurationError(f"URL 메타데이터 추출 실패: {msg}") from e
     except Exception as e:
